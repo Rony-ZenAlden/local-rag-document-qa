@@ -1,0 +1,36 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure pip for better reliability
+RUN pip config set global.timeout 1000
+RUN pip config set global.retries 10
+RUN pip config set install.extra-index-url "https://download.pytorch.org/whl/cpu"
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies (CPU-only PyTorch)
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir "torch>=2.0.0" --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Copy project code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/media /app/vector_db /app/staticfiles
+
+# Collect static files
+RUN python manage.py collectstatic --noinput || true
+
+# Expose port
+EXPOSE 8000
+
+# Use Waitress (Windows/Mac compatible) - NO --call flag!
+CMD ["waitress-serve", "--port=8000", "config.wsgi:application"]
